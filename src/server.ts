@@ -41,5 +41,6 @@ wss.on('connection', (ws: WebSocket) => {
 
 //start our server
 server.listen(process.env.PORT || 8999, () => {
-  console.log(`Server started on port ${server.address()} :)`);
+  const { port } = server.address() as WebSocket.AddressInfo;
+  console.log(`Server started on port ${port} :)`);
 });
