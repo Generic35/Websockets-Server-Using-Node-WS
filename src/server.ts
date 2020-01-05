@@ -2,6 +2,22 @@ import * as express from 'express';
 import * as http from 'http';
 import * as WebSocket from 'ws';
 
+export class TrainMessage {
+  constructor(
+    public sender: string,
+    public content: string,
+    public isBroadcast = false,
+  ) { }
+}
+
+interface ExtWebSocket extends WebSocket {
+  isAlive: boolean;
+}
+
+function createMessage(sender = 'NS', content: string, isBroadcast = false, ): string {
+  return JSON.stringify(new TrainMessage(sender, content, isBroadcast));
+}
+
 const app = express();
 
 //initialize a simple http server
@@ -10,7 +26,7 @@ const server = http.createServer(app);
 //initialize the WebSocket server instance
 const wss = new WebSocket.Server({ server });
 
-wss.on('connection', (ws: any) => {
+wss.on('connection', (ws: ExtWebSocket) => {
 
   ws.isAlive = true;
 
@@ -21,43 +37,46 @@ wss.on('connection', (ws: any) => {
   })
 
   //connection is up, let's add a simple simple event
-  ws.on('message', (message: string) => {
+  //connection is up, let's add a simple simple event
+  ws.on('message', (msg: string) => {
 
-    //log the received message and send it back to the client
-    console.log('received: %s', message);
+    const message = JSON.parse(msg) as TrainMessage;
 
-    const broadcastRegex = /^broadcast\:/;
+    setTimeout(() => {
+      if (message.isBroadcast) {
 
-    if (broadcastRegex.test(message)) {
-      message = message.replace(broadcastRegex, '');
-
-      //send back the message to the other clients
-      wss.clients
-        .forEach(client => {
-          if (client != ws) {
-            client.send(`Hello, broadcast message -> ${message}`);
-          }
-        });
-
-    } else {
-      ws.send(`Hello, you sent -> ${message}`);
-    }
+        //send back the message to the other clients
+        wss.clients
+          .forEach(client => {
+            if (client != ws) {
+              client.send(createMessage(message.sender, message.content, true));
+            }
+          });
+      }
+      ws.send(createMessage('Web socket server', `You sent -> ${message.content}`, message.isBroadcast));
+    }, 1000);
   });
 
   //send immediatly a feedback to the incoming connection    
-  // ws.send('Hi there, I am a WebSocket server');
+  ws.send(createMessage('Web socket server', 'Hi there, I am a WebSocket server', true));
+
+  ws.on('error', (err) => {
+    console.warn(`Client disconnected - reason: ${err}`);
+  })
 });
 
 setInterval(() => {
-  wss.clients.forEach((ws: any) => {
+  wss.clients.forEach((ws: ExtWebSocket) => {
 
-    if (!ws.isAlive) {
+    const extWs = ws as ExtWebSocket;
+
+    if (!extWs.isAlive) {
       console.log('logging of client for innactivity', ws)
-      return ws.terminate();
+      return extWs.terminate();
     } else {
       console.log('client was active 10s ago, pinging him again!', ws)
-      ws.isAlive = false;
-      ws.ping(null, false, true);
+      extWs.isAlive = false;
+      extWs.ping(null, undefined);
     }
   });
 }, 10000);
