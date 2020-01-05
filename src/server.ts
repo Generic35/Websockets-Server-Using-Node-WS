@@ -10,7 +10,15 @@ const server = http.createServer(app);
 //initialize the WebSocket server instance
 const wss = new WebSocket.Server({ server });
 
-wss.on('connection', (ws: WebSocket) => {
+wss.on('connection', (ws: any) => {
+
+  ws.isAlive = true;
+
+  ws.on('pong', () => {
+
+    console.log('PONG RECEIVED!');
+    ws.isAlive = true;
+  })
 
   //connection is up, let's add a simple simple event
   ws.on('message', (message: string) => {
@@ -35,9 +43,24 @@ wss.on('connection', (ws: WebSocket) => {
       ws.send(`Hello, you sent -> ${message}`);
     }
   });
+
   //send immediatly a feedback to the incoming connection    
-  ws.send('Hi there, I am a WebSocket server');
+  // ws.send('Hi there, I am a WebSocket server');
 });
+
+setInterval(() => {
+  wss.clients.forEach((ws: any) => {
+
+    if (!ws.isAlive) {
+      console.log('logging of client for innactivity', ws)
+      return ws.terminate();
+    } else {
+      console.log('client was active 10s ago, pinging him again!', ws)
+      ws.isAlive = false;
+      ws.ping(null, false, true);
+    }
+  });
+}, 10000);
 
 //start our server
 server.listen(process.env.PORT || 8999, () => {
